@@ -4,7 +4,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UserAccount } from '@prisma/client';
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma.service';
@@ -16,6 +15,20 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MINUTES = 15;
+
+type UserAccountRecord = {
+  id: number;
+  username: string;
+  role: string;
+  displayName: string | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  failedLoginCount: number;
+  lockedUntil: Date | null;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 @Injectable()
 export class AccountsService {
@@ -417,7 +430,7 @@ export class AccountsService {
     return `（${parts.join(' | ')}）`;
   }
 
-  private toViewModel(row: UserAccount) {
+  private toViewModel(row: UserAccountRecord) {
     return {
       id: row.id,
       username: row.username,
@@ -433,4 +446,3 @@ export class AccountsService {
     };
   }
 }
-
