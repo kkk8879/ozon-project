@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ozon-admin-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-ozon_admin}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./ozon-admin-api
+      dockerfile: Dockerfile
+    container_name: ozon-admin-api
+    env_file:
+      - ./ozon-admin-api/.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./ozon-admin-web
+      dockerfile: Dockerfile
+    container_name: ozon-admin-web
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+      - PORT=3000
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -1,0 +1,8 @@
+# Root-level local secrets
+.env
+.env.local
+.env.production
+
+# Keep examples
+!.env.example
+!.env.compose.example

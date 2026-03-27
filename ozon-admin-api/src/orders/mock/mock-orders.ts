@@ -1,0 +1,138 @@
+export type MockOrder = {
+  id: number;
+  orderNo: string;
+  storeName: string;
+  status: string;
+  totalAmount: number;
+  currency: string;
+  createdAt: string;
+  customerName: string;
+  country: string;
+  city: string;
+  address: string;
+  itemCount: number;
+  note: string;
+};
+
+export const mockOrders: MockOrder[] = [
+  {
+    id: 1,
+    orderNo: 'OZ20260320001',
+    storeName: 'Ozon俄罗斯店A',
+    status: 'pending',
+    totalAmount: 129.99,
+    currency: 'USD',
+    createdAt: '2026-03-20T09:10:00.000Z',
+    customerName: 'Ivan Petrov',
+    country: 'Russia',
+    city: 'Moscow',
+    address: 'Lenina Street 12',
+    itemCount: 2,
+    note: '客户要求尽快发货。',
+  },
+  {
+    id: 2,
+    orderNo: 'OZ20260320002',
+    storeName: 'Ozon俄罗斯店B',
+    status: 'paid',
+    totalAmount: 249.5,
+    currency: 'USD',
+    createdAt: '2026-03-20T10:00:00.000Z',
+    customerName: 'Anna Smirnova',
+    country: 'Russia',
+    city: 'Saint Petersburg',
+    address: 'Nevsky Ave 88',
+    itemCount: 1,
+    note: '已付款，等待仓库确认。',
+  },
+  {
+    id: 3,
+    orderNo: 'OZ20260319003',
+    storeName: 'Ozon欧洲店A',
+    status: 'ready_to_ship',
+    totalAmount: 88.8,
+    currency: 'USD',
+    createdAt: '2026-03-19T15:30:00.000Z',
+    customerName: 'Lucas Meyer',
+    country: 'Germany',
+    city: 'Berlin',
+    address: 'Alexanderplatz 5',
+    itemCount: 3,
+    note: '可安排明日出库。',
+  },
+  {
+    id: 4,
+    orderNo: 'OZ20260319004',
+    storeName: 'Ozon欧洲店B',
+    status: 'shipped',
+    totalAmount: 399,
+    currency: 'USD',
+    createdAt: '2026-03-19T18:45:00.000Z',
+    customerName: 'Emma Dubois',
+    country: 'France',
+    city: 'Paris',
+    address: 'Rue de Rivoli 20',
+    itemCount: 4,
+    note: '物流单号已生成。',
+  },
+  {
+    id: 5,
+    orderNo: 'OZ20260318005',
+    storeName: 'Ozon俄罗斯店A',
+    status: 'delivered',
+    totalAmount: 65,
+    currency: 'USD',
+    createdAt: '2026-03-18T08:20:00.000Z',
+    customerName: 'Sergey Ivanov',
+    country: 'Russia',
+    city: 'Kazan',
+    address: 'Baumana Street 3',
+    itemCount: 1,
+    note: '客户已签收。',
+  },
+  {
+    id: 6,
+    orderNo: 'OZ20260318006',
+    storeName: 'Ozon测试店',
+    status: 'cancelled',
+    totalAmount: 145.2,
+    currency: 'USD',
+    createdAt: '2026-03-18T11:05:00.000Z',
+    customerName: 'Test User',
+    country: 'Poland',
+    city: 'Warsaw',
+    address: 'Test Road 99',
+    itemCount: 2,
+    note: '客户主动取消订单。',
+  },
+  {
+    id: 7,
+    orderNo: 'OZ20260320007',
+    storeName: 'Ozon欧洲店A',
+    status: 'pending',
+    totalAmount: 520,
+    currency: 'USD',
+    createdAt: '2026-03-20T12:15:00.000Z',
+    customerName: 'Marco Rossi',
+    country: 'Italy',
+    city: 'Milan',
+    address: 'Via Torino 66',
+    itemCount: 5,
+    note: '高金额订单，建议优先处理。',
+  },
+  {
+    id: 8,
+    orderNo: 'OZ20260317008',
+    storeName: 'Ozon样板店',
+    status: 'paid',
+    totalAmount: 79.9,
+    currency: 'USD',
+    createdAt: '2026-03-17T13:40:00.000Z',
+    customerName: 'Olivia Brown',
+    country: 'UK',
+    city: 'London',
+    address: 'Baker Street 221B',
+    itemCount: 2,
+    note: '等待仓库出库。',
+  },
+];

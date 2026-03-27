@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Store {
+  id        Int      @id @default(autoincrement())
+  name      String
+  clientId  String
+  apiKey    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  orders    Order[]
+}
+
+model Order {
+  id           Int      @id @default(autoincrement())
+  orderNo      String
+  storeId      Int
+  storeName    String
+  status       String
+  totalAmount  Float
+  currency     String
+  createdAt    DateTime
+  fulfillmentMode String?
+  warehouseId  String?
+  warehouseName String?
+  deliveryMethod String?
+  customerName String
+  country      String
+  city         String
+  address      String
+  itemCount    Int
+  note         String   @default("")
+  source       String   @default("mock")
+  syncedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, orderNo])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model SyncTaskLog {
+  id                Int      @id @default(autoincrement())
+  startedAt         DateTime
+  finishedAt        DateTime
+  durationMs        Int
+  storeCount        Int
+  successStoreCount Int
+  failedStoreCount  Int
+  syncedOrderCount  Int
+  status            String
+  storesSnapshot    String
+  failureDetail     String?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+}
+
+model UserAccount {
+  id                 Int       @id @default(autoincrement())
+  username           String    @unique
+  passwordHash       String
+  role               String
+  displayName        String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  module    String
+  action    String
+  role      String
+  operator  String?
+  targetType String?
+  targetId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model FxRateSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
