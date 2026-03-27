@@ -122,9 +122,11 @@ export class FxService {
     }
   }
 
-  private async getSettingsMap() {
+  private async getSettingsMap(): Promise<Map<string, string>> {
     const settings = await this.prisma.fxRateSetting.findMany();
-    return new Map(settings.map((item) => [item.key, item.value]));
+    return new Map<string, string>(
+      settings.map((item) => [item.key, item.value] as [string, string]),
+    );
   }
 
   private async upsertSetting(key: string, value: string) {
@@ -154,4 +156,3 @@ export class FxService {
     return parsed;
   }
 }
-

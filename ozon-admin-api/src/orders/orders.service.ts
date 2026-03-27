@@ -73,6 +73,12 @@ type OzonWebhookEvent = {
   clientIdHint?: string;
 };
 
+type WebhookStoreLite = {
+  id: number;
+  name: string;
+  clientId: string;
+};
+
 @Injectable()
 export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly autoSyncEnabled = this.toBoolEnv(
@@ -570,16 +576,18 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    const stores = await this.prisma.store.findMany({
+    const stores = (await this.prisma.store.findMany({
       select: {
         id: true,
         name: true,
         clientId: true,
       },
-    });
-    const storeById = new Map(stores.map((item) => [item.id, item]));
-    const storeByClientId = new Map(
-      stores.map((item) => [item.clientId, item]),
+    })) as WebhookStoreLite[];
+    const storeById = new Map<number, WebhookStoreLite>(
+      stores.map((item) => [item.id, item] as [number, WebhookStoreLite]),
+    );
+    const storeByClientId = new Map<string, WebhookStoreLite>(
+      stores.map((item) => [item.clientId, item] as [string, WebhookStoreLite]),
     );
     const defaultClientIdHint =
       this.readHeaderValue(headers, 'x-ozon-client-id') ||
