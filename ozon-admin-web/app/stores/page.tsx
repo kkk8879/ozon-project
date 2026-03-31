@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { API_DIRECT_BASE_URL } from '../../lib/api-config';
 import { DetailCard } from '../../components/detail-card';
 import { GuardedActionButton } from '../../components/guarded-action-button';
 import { ListPageActions } from '../../components/list-page-actions';
@@ -35,8 +36,16 @@ import {
   normalizeCurrentPage,
   paginateItems,
 } from '../../lib/pagination-utils';
+import { getCachedValue, setCachedValue } from '../../lib/client-cache';
 
 const PAGE_SIZE = 5;
+const STORES_CACHE_KEY = 'stores:page:v1';
+const STORES_CACHE_TTL_MS = 2 * 60 * 1000;
+
+type StoresCacheData = {
+  stores: StoreItem[];
+  orders: OrderItem[];
+};
 
 type StoreDetailDraft = {
   name: string;
@@ -85,17 +94,34 @@ function StoresPageContent() {
 
   async function loadStores() {
     try {
-      setTableLoading(true);
-      const [storeData, orderData] = await Promise.all([
-        storeApi.getStores(),
-        orderApi.getOrders(),
-      ]);
+      const cached = getCachedValue<StoresCacheData>(STORES_CACHE_KEY);
+      if (stores.length === 0 && cached) {
+        setStores(cached.stores);
+        setOrders(cached.orders);
+        setTableLoading(false);
+      } else {
+        setTableLoading(stores.length === 0);
+      }
+
+      const storeData = await storeApi.getStores();
       setStores(storeData);
-      setOrders(orderData);
       setApiError('');
+      setTableLoading(false);
+
+      const orderData = await orderApi.getOrders();
+      setOrders(orderData);
+
+      setCachedValue(
+        STORES_CACHE_KEY,
+        {
+          stores: storeData,
+          orders: orderData,
+        },
+        STORES_CACHE_TTL_MS,
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '获取店铺数据失败，请检查接口服务。');
-      setApiError('后端服务未连接（localhost:3001），请先启动 API 服务。');
+      setApiError(`后端服务未连接（${API_DIRECT_BASE_URL}），请先启动 API 服务。`);
     } finally {
       setTableLoading(false);
     }

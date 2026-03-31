@@ -18,6 +18,7 @@ const PERMISSION_LABELS: Record<PermissionCode, string> = {
   'users.read': '查看账号',
   'users.create': '新增账号',
   'users.update': '编辑账号',
+  'users.unlock': '解锁账号',
   'users.reset_password': '重置密码',
   'users.delete': '删除账号',
 };

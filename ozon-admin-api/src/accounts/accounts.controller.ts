@@ -63,7 +63,7 @@ export class AccountsController {
   }
 
   @Patch(':id/unlock')
-  @Permissions('users.update')
+  @Permissions('users.unlock')
   unlockAccount(
     @Param('id', ParseIntPipe) id: number,
     @Headers('x-user-role') role?: string,

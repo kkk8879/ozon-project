@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { API_DIRECT_BASE_URL } from '../../lib/api-config';
 import { DetailCard } from '../../components/detail-card';
 import { GuardedActionButton } from '../../components/guarded-action-button';
 import { ListPageActions } from '../../components/list-page-actions';
@@ -47,9 +48,26 @@ const PAGE_SIZE = 5;
 const DEFAULT_SYNC_DAYS = 365;
 const DEFAULT_SYNC_LIMIT = 1000;
 const DEFAULT_SYNC_MAX_PAGES = 50;
+const ORDER_FILTER_PRESETS_KEY = 'orders:filter-presets:v1';
 
 type OrderDetailDraft = {
   note: string;
+};
+
+type OrderFilterSnapshot = {
+  selectedStatus: string;
+  selectedStore: string;
+  searchKeyword: string;
+  minAmount: string;
+  maxAmount: string;
+  startDate: string;
+  endDate: string;
+};
+
+type OrderFilterPreset = {
+  id: string;
+  name: string;
+  filters: OrderFilterSnapshot;
 };
 
 function getSyncStatusLabel(status: string) {
@@ -129,11 +147,14 @@ function OrdersPageContent() {
   const [syncMaxPagesInput, setSyncMaxPagesInput] = useState(
     String(DEFAULT_SYNC_MAX_PAGES),
   );
+  const [filterPresets, setFilterPresets] = useState<OrderFilterPreset[]>([]);
+  const [presetNameInput, setPresetNameInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [jumpPageInput, setJumpPageInput] = useState('1');
   const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
   const [detailSaving, setDetailSaving] = useState(false);
+  const [batchNoteSaving, setBatchNoteSaving] = useState(false);
   const [isDetailEditing, setIsDetailEditing] = useState(false);
   const [apiError, setApiError] = useState('');
   const [role, setRole] = useState<UserRole>('admin');
@@ -144,6 +165,7 @@ function OrdersPageContent() {
   });
   const canSyncOrders = hasPermission(role, 'orders.sync');
   const canEditOrders = hasPermission(role, 'orders.edit_note');
+  const canExportOrders = hasPermission(role, 'orders.export');
 
   async function loadOrdersPageData() {
     try {
@@ -183,7 +205,7 @@ function OrdersPageContent() {
       setApiError('');
     } catch (error) {
       console.error('获取订单页面数据失败:', error);
-      setApiError('后端服务未连接（localhost:3001），请先启动 API 服务。');
+      setApiError(`后端服务未连接（${API_DIRECT_BASE_URL}），请先启动 API 服务。`);
     } finally {
       setLoading(false);
     }
@@ -198,6 +220,42 @@ function OrdersPageContent() {
       console.error('获取同步日志失败:', error);
     } finally {
       setSyncLogLoading(false);
+    }
+  }
+
+  function getCurrentFilterSnapshot(): OrderFilterSnapshot {
+    return {
+      selectedStatus,
+      selectedStore,
+      searchKeyword,
+      minAmount,
+      maxAmount,
+      startDate,
+      endDate,
+    };
+  }
+
+  function applyFilterSnapshot(snapshot: OrderFilterSnapshot) {
+    setSelectedStatus(snapshot.selectedStatus || 'all');
+    setSelectedStore(snapshot.selectedStore || 'all');
+    setSearchKeyword(snapshot.searchKeyword || '');
+    setMinAmount(snapshot.minAmount || '');
+    setMaxAmount(snapshot.maxAmount || '');
+    setStartDate(snapshot.startDate || '');
+    setEndDate(snapshot.endDate || '');
+    setCurrentPage(1);
+    setSelectedOrder(null);
+    setSelectedOrderIds([]);
+    setIsDetailEditing(false);
+  }
+
+  function saveFilterPresets(next: OrderFilterPreset[]) {
+    setFilterPresets(next);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(ORDER_FILTER_PRESETS_KEY, JSON.stringify(next));
+    } catch {
+      // ignore localStorage errors
     }
   }
 
@@ -264,6 +322,26 @@ function OrdersPageContent() {
   useEffect(() => {
     loadOrdersPageData();
     loadSyncLogs();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(ORDER_FILTER_PRESETS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as OrderFilterPreset[];
+      if (!Array.isArray(parsed)) return;
+      const normalized = parsed.filter(
+        (item) =>
+          Boolean(item) &&
+          typeof item.id === 'string' &&
+          typeof item.name === 'string' &&
+          Boolean(item.filters),
+      );
+      setFilterPresets(normalized);
+    } catch {
+      // ignore parse errors
+    }
   }, []);
 
   useEffect(() => {
@@ -438,6 +516,10 @@ function OrdersPageContent() {
   }
 
   function handleExportCsv() {
+    if (!canExportOrders) {
+      setApiError(getPermissionDeniedMessage('orders.export'));
+      return;
+    }
     if (filteredOrders.length === 0) {
       alert('当前没有可导出的订单数据');
       return;
@@ -459,6 +541,10 @@ function OrdersPageContent() {
   }
 
   function handleExportSelectedCsv() {
+    if (!canExportOrders) {
+      setApiError(getPermissionDeniedMessage('orders.export'));
+      return;
+    }
     if (selectedOrders.length === 0) {
       alert('请先选择需要导出的订单');
       return;
@@ -477,6 +563,113 @@ function OrdersPageContent() {
       targetType: 'order',
       detail: `导出已选订单 CSV，条数: ${selectedOrders.length}`,
     });
+  }
+
+  function handleSaveFilterPreset() {
+    const name = presetNameInput.trim();
+    if (!name) {
+      alert('请输入筛选方案名称');
+      return;
+    }
+
+    const snapshot = getCurrentFilterSnapshot();
+    const existing = filterPresets.find((item) => item.name === name);
+
+    const next: OrderFilterPreset[] = existing
+      ? filterPresets.map((item) =>
+          item.id === existing.id ? { ...item, filters: snapshot } : item,
+        )
+      : [
+          ...filterPresets,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name,
+            filters: snapshot,
+          },
+        ];
+
+    saveFilterPresets(next);
+    setPresetNameInput('');
+  }
+
+  function handleApplyFilterPreset(preset: OrderFilterPreset) {
+    applyFilterSnapshot(preset.filters);
+    scrollToOrderList();
+  }
+
+  function handleDeleteFilterPreset(presetId: string) {
+    const next = filterPresets.filter((item) => item.id !== presetId);
+    saveFilterPresets(next);
+  }
+
+  async function handleBatchAppendNote() {
+    if (!canEditOrders) {
+      setApiError(getPermissionDeniedMessage('orders.edit_note'));
+      return;
+    }
+
+    if (selectedOrderIds.length === 0) {
+      alert('请先选择订单');
+      return;
+    }
+
+    const note = window.prompt('请输入要批量追加的备注');
+    if (note === null) return;
+    const appendText = note.trim();
+    if (!appendText) {
+      alert('备注不能为空');
+      return;
+    }
+
+    try {
+      setBatchNoteSaving(true);
+      const selectedIdSet = new Set(selectedOrderIds);
+      const targets = orders.filter((item) => selectedIdSet.has(item.id));
+
+      const results = await Promise.allSettled(
+        targets.map((item) => {
+          const merged = item.note?.trim()
+            ? `${item.note}\n${appendText}`
+            : appendText;
+          return orderApi.updateOrder(item.id, { note: merged });
+        }),
+      );
+
+      const successData = results
+        .filter(
+          (
+            result,
+          ): result is PromiseFulfilledResult<{
+            message: string;
+            data: OrderItem;
+          }> => result.status === 'fulfilled',
+        )
+        .map((result) => result.value.data);
+
+      const failedCount = results.length - successData.length;
+
+      if (successData.length > 0) {
+        const nextMap = new Map(successData.map((item) => [item.id, item]));
+        setOrders((prev) => prev.map((item) => nextMap.get(item.id) ?? item));
+        if (selectedOrder && nextMap.has(selectedOrder.id)) {
+          const nextOrder = nextMap.get(selectedOrder.id);
+          if (nextOrder) {
+            setSelectedOrder(nextOrder);
+            setDetailDraft((prev) => ({ ...prev, note: nextOrder.note }));
+          }
+        }
+      }
+
+      if (failedCount > 0) {
+        alert(`批量备注完成：成功 ${successData.length} 条，失败 ${failedCount} 条`);
+      } else {
+        alert(`批量备注完成：成功 ${successData.length} 条`);
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '批量备注失败');
+    } finally {
+      setBatchNoteSaving(false);
+    }
   }
 
   function scrollToOrderList() {
@@ -897,6 +1090,15 @@ function OrdersPageContent() {
           </div>
 
           <div className="batch-toolbar">
+            <GuardedActionButton
+              role={role}
+              permission="orders.edit_note"
+              className="btn btn-default btn-sm"
+              onClick={handleBatchAppendNote}
+              disabled={batchNoteSaving}
+            >
+              {batchNoteSaving ? '批量备注中...' : '批量追加备注'}
+            </GuardedActionButton>
             <button type="button" className="btn btn-default btn-sm" onClick={toggleSelectCurrentPage}>
               {isAllPageSelected ? '取消本页全选' : '本页全选'}
             </button>
@@ -976,6 +1178,54 @@ function OrdersPageContent() {
               onChange={(e) => setEndDate(e.target.value)}
               type="date"
             />
+          </div>
+
+          <div className="order-filter-item" style={{ gridColumn: '1 / -1' }}>
+            <label className="filter-label">筛选方案</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                className="input"
+                value={presetNameInput}
+                onChange={(event) => setPresetNameInput(event.target.value)}
+                placeholder="输入方案名后保存"
+                style={{ width: 220, marginTop: 0 }}
+              />
+              <button
+                type="button"
+                className="btn btn-default btn-sm"
+                onClick={handleSaveFilterPreset}
+              >
+                保存方案
+              </button>
+              {filterPresets.map((preset) => (
+                <div
+                  key={preset.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 8px',
+                    border: '1px solid var(--line-color)',
+                    borderRadius: 999,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-default btn-sm"
+                    onClick={() => handleApplyFilterPreset(preset)}
+                  >
+                    {preset.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-default btn-sm"
+                    onClick={() => handleDeleteFilterPreset(preset.id)}
+                  >
+                    删除
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
 
           <ListPageActions>

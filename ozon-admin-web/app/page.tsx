@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { API_DIRECT_BASE_URL } from '../lib/api-config';
+import { getCachedValue, setCachedValue } from '../lib/client-cache';
 import { formatAmountDual, formatOrdersAmountDual } from '../lib/money-utils';
 import { getOrderStatusClassName, getOrderStatusLabel } from '../lib/order-utils';
 import { dashboardApi } from '../services/dashboard-service';
@@ -29,9 +31,19 @@ type TrendDataResult = {
   granularity: TrendGranularity;
 };
 
+type DashboardCacheData = {
+  summary: DashboardSummary | null;
+  orderSummary: OrderSummary | null;
+  stores: StoreItem[];
+  orders: OrderItem[];
+  fxRates: FxRates | null;
+};
+
 const RANGE_OPTIONS = [7, 15, 30, 90, 365];
 const DEFAULT_RUB_TO_CNY = 0.08;
 const DEFAULT_USD_TO_RUB = 90;
+const DASHBOARD_CACHE_KEY = 'dashboard:home:v1';
+const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
 
 function toDateKey(date: Date) {
   const year = date.getFullYear();
@@ -201,7 +213,8 @@ export default function DashboardPage() {
   const [orderSummary, setOrderSummary] = useState<OrderSummary | null>(null);
   const [stores, setStores] = useState<StoreItem[]>([]);
   const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [trendDays, setTrendDays] = useState(7);
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('count');
   const [apiError, setApiError] = useState('');
@@ -210,27 +223,86 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadDashboardData() {
       try {
-        const [summaryData, orderSummaryData, storeData, orderData, ratesData] = await Promise.all([
+        const [summaryData, orderSummaryData, storeData, ratesData] = await Promise.all([
           dashboardApi.getSummary(),
           orderApi.getSummary(),
           storeApi.getStores(),
-          orderApi.getOrders(),
           fxApi.getRates(),
         ]);
         setSummary(summaryData);
         setOrderSummary(orderSummaryData);
         setStores(storeData);
-        setOrders(orderData);
         setFxRates(ratesData);
         setApiError('');
+        const existingCache = getCachedValue<DashboardCacheData>(DASHBOARD_CACHE_KEY);
+        setCachedValue(
+          DASHBOARD_CACHE_KEY,
+          {
+            summary: summaryData,
+            orderSummary: orderSummaryData,
+            stores: storeData,
+            orders: existingCache?.orders ?? [],
+            fxRates: ratesData,
+          },
+          DASHBOARD_CACHE_TTL_MS,
+        );
       } catch {
-        setApiError('后端服务未连接（localhost:3001），请先启动 API 服务。');
+        setApiError(`后端服务未连接（${API_DIRECT_BASE_URL}），请先启动 API 服务。`);
       } finally {
         setLoading(false);
       }
     }
 
+    const cached = getCachedValue<DashboardCacheData>(DASHBOARD_CACHE_KEY);
+    setLoading(!cached);
     void loadDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const cached = getCachedValue<DashboardCacheData>(DASHBOARD_CACHE_KEY);
+    if (!cached) return;
+    setSummary(cached.summary);
+    setOrderSummary(cached.orderSummary);
+    setStores(cached.stores);
+    setOrders(cached.orders);
+    setFxRates(cached.fxRates);
+    setLoading(false);
+    setApiError('');
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOrdersData() {
+      try {
+        setOrdersLoading(true);
+        const orderData = await orderApi.getOrders();
+        if (cancelled) return;
+        setOrders(orderData);
+        const existingCache = getCachedValue<DashboardCacheData>(DASHBOARD_CACHE_KEY);
+        setCachedValue(
+          DASHBOARD_CACHE_KEY,
+          {
+            summary: existingCache?.summary ?? null,
+            orderSummary: existingCache?.orderSummary ?? null,
+            stores: existingCache?.stores ?? [],
+            orders: orderData,
+            fxRates: existingCache?.fxRates ?? null,
+          },
+          DASHBOARD_CACHE_TTL_MS,
+        );
+      } catch {
+        if (cancelled) return;
+        setOrders([]);
+      } finally {
+        if (cancelled) return;
+        setOrdersLoading(false);
+      }
+    }
+
+    void loadOrdersData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const dashboardRecentRows = 3;
@@ -254,6 +326,7 @@ export default function DashboardPage() {
   const todayPendingLink = `/orders?startDate=${todayKey}&endDate=${todayKey}&status=pending#order-list-section`;
   const readyToShipLink = '/orders?status=ready_to_ship#order-list-section';
   const deliveredLink = '/orders?status=delivered#order-list-section';
+  const ordersBusy = ordersLoading && orders.length === 0;
 
   const trendResult = useMemo(
     () => buildTrendData(orders, trendDays, fxRates),
@@ -364,7 +437,7 @@ export default function DashboardPage() {
           <div className="stat-card stat-card-clickable">
             <div className="stat-title">今日订单金额</div>
             <div className="stat-value" style={{ fontSize: 20, lineHeight: 1.35, wordBreak: 'break-word' }}>
-              {loading ? '...' : todayOrderAmountText}
+              {ordersBusy ? '...' : todayOrderAmountText}
             </div>
             <div className="stat-footer">点击查看今日订单</div>
           </div>
@@ -373,7 +446,7 @@ export default function DashboardPage() {
           <div className="stat-card stat-card-clickable">
             <div className="stat-title">待发货状态金额</div>
             <div className="stat-value" style={{ fontSize: 20, lineHeight: 1.35, wordBreak: 'break-word' }}>
-              {loading ? '...' : readyToShipAmountText}
+              {ordersBusy ? '...' : readyToShipAmountText}
             </div>
             <div className="stat-footer">点击查看待发货订单</div>
           </div>
@@ -382,7 +455,7 @@ export default function DashboardPage() {
           <div className="stat-card stat-card-clickable">
             <div className="stat-title">已完成状态金额</div>
             <div className="stat-value" style={{ fontSize: 20, lineHeight: 1.35, wordBreak: 'break-word' }}>
-              {loading ? '...' : deliveredAmountText}
+              {ordersBusy ? '...' : deliveredAmountText}
             </div>
             <div className="stat-footer">点击查看已完成订单</div>
           </div>
@@ -578,4 +651,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

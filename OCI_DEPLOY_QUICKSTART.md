@@ -1,152 +1,132 @@
 # OCI（甲骨文云）快速部署手册
 
-> 适用当前项目：`docker-compose.yml + ozon-admin-api + ozon-admin-web`  
-> 系统：Ubuntu 22.04/24.04
+适用于当前项目：
+- `docker-compose.yml`
+- `ozon-admin-api`
+- `ozon-admin-web`
 
-## 0. 先决条件
+示例域名：
+- 前端：`admin.xuzhiqingvip.top`
+- API：`api.xuzhiqingvip.top`
 
-- 已有 OCI 实例（建议 A1 Flex）
-- 已绑定公网 IP
-- 已有域名（本项目使用：`admin.xuzhiqingvip.top`、`api.xuzhiqingvip.top`）
-- 本地项目已通过发布闸门：`.\scripts\ops-release-gate.ps1`
+## 1. 先放行端口（OCI 控制台）
 
-## 1. OCI 控制台网络放行（重要）
-
-在 OCI 的 NSG 或 Security List 里只放行：
-
-- 入站 `22`（SSH）
-- 入站 `80`（HTTP，签证书用）
-- 入站 `443`（HTTPS）
+在 NSG 或 Security List 仅放行：
+- 22（SSH）
+- 80（HTTP）
+- 443（HTTPS）
 
 不要对公网放行：
-
-- `3000`（Web 内部端口）
-- `3001`（API 内部端口）
-- `5432`（PostgreSQL）
+- 3000（web）
+- 3001（api）
+- 5432（postgres）
 
 ## 2. 服务器初始化
 
 ```bash
 sudo apt update
-sudo apt install -y ca-certificates curl git nginx
-
+sudo apt install -y ca-certificates curl git
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+$(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker $USER
 ```
 
-重新登录 SSH 一次。
+重新登录 SSH。
 
-## 3. 拉代码并配置环境
+## 3. 拉代码并配置
 
 ```bash
 sudo mkdir -p /opt/ozon-project
 sudo chown -R $USER:$USER /opt/ozon-project
 git clone <你的仓库地址> /opt/ozon-project
 cd /opt/ozon-project
-```
 
-复制配置模板：
-
-```bash
 cp .env.compose.example .env
 cp ozon-admin-api/.env.production.example ozon-admin-api/.env
 ```
 
-编辑根目录 `.env`（compose 使用）：
+编辑根目录 `.env`：
 
 ```env
 POSTGRES_DB=ozon_admin
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<强密码>
 POSTGRES_PORT=5432
-
-DATABASE_URL=postgresql://postgres:<强密码>@postgres:5432/ozon_admin?schema=public
-
 API_PORT=3001
 WEB_PORT=3000
+DATABASE_URL=postgresql://postgres:<强密码>@postgres:5432/ozon_admin?schema=public
 NEXT_PUBLIC_API_BASE_URL=https://api.xuzhiqingvip.top
 ```
 
-编辑 `ozon-admin-api/.env`（API 使用）：
-
+编辑 `ozon-admin-api/.env`：
 - `DATABASE_URL=postgresql://postgres:<强密码>@postgres:5432/ozon_admin?schema=public`
-- `ORDER_WEBHOOK_SECRET=<强随机串>`
 - `CORS_ORIGINS=https://admin.xuzhiqingvip.top`
-- 真实 Ozon 参数（如果要启用真实同步）
+- `ORDER_WEBHOOK_SECRET=<随机强字符串>`
+- Ozon 同步参数（按需）
 
-## 4. 启动 Docker 服务
+## 4. 启动服务
 
 ```bash
-cd /opt/ozon-project
 docker compose up -d --build
 docker compose ps
 ```
 
-本机健康检查：
+## 5. 低配机推荐恢复方式（不重建）
 
 ```bash
+bash scripts/ops-cloud-recover.sh
+```
+
+仅恢复 api + postgres：
+
+```bash
+bash scripts/ops-cloud-recover.sh --skip-web
+```
+
+## 6. 健康检查
+
+```bash
+curl -I http://127.0.0.1:3000
 curl -sS http://127.0.0.1:3001/health
 curl -sS http://127.0.0.1:3001/health/ready
-curl -I http://127.0.0.1:3000
 ```
 
-## 5. 配置 Nginx 反向代理
+## 7. 反向代理（容器方式）
 
-把模板拷到 Nginx：
+使用仓库配置：`deploy/oci/nginx-ozon-admin.conf`
 
 ```bash
-sudo cp /opt/ozon-project/deploy/oci/nginx-ozon-admin.conf /etc/nginx/sites-available/ozon-admin.conf
+docker rm -f ozon-proxy 2>/dev/null || true
+docker run -d --name ozon-proxy \
+  --restart unless-stopped \
+  --network ozon-project_default \
+  -p 80:80 \
+  -v /opt/ozon-project/deploy/oci/nginx-ozon-admin.conf:/etc/nginx/conf.d/default.conf:ro \
+  nginx:alpine
 ```
 
-模板已写入你的域名：`admin.xuzhiqingvip.top`、`api.xuzhiqingvip.top`。
+## 8. HTTPS
 
-启用站点：
+可接 Cloudflare 或使用 certbot（如宿主机装 nginx）。
 
-```bash
-sudo ln -sf /etc/nginx/sites-available/ozon-admin.conf /etc/nginx/sites-enabled/ozon-admin.conf
-sudo nginx -t
-sudo systemctl reload nginx
-```
+## 9. 发布与回滚
 
-## 6. 申请 HTTPS 证书（Let's Encrypt）
-
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d admin.xuzhiqingvip.top -d api.xuzhiqingvip.top
-```
-
-完成后验证：
-
-- `https://admin.xuzhiqingvip.top`
-- `https://api.xuzhiqingvip.top/health`
-
-## 7. 日常发布
+发布：
 
 ```bash
 cd /opt/ozon-project
-git pull
+git pull --ff-only
 docker compose up -d --build
-docker compose logs --tail=200 api
-docker compose logs --tail=200 web
 ```
 
-## 8. 回滚（最小）
+回滚：
 
 ```bash
 cd /opt/ozon-project
-git checkout <上一个稳定tag或commit>
+git checkout <稳定tag或commit>
 docker compose up -d --build
 ```
-
-数据库回滚按你已验证流程：
-
-- 备份：`scripts/ops-db-backup.ps1`
-- 恢复：`scripts/ops-db-restore.ps1`

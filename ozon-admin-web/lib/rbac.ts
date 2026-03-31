@@ -20,6 +20,7 @@ export type PermissionCode =
   | 'users.read'
   | 'users.create'
   | 'users.update'
+  | 'users.unlock'
   | 'users.reset_password'
   | 'users.delete';
 
@@ -48,6 +49,7 @@ const ROLE_PERMISSION_MAP: Record<UserRole, PermissionCode[]> = {
     'users.read',
     'users.create',
     'users.update',
+    'users.unlock',
     'users.reset_password',
     'users.delete',
   ],

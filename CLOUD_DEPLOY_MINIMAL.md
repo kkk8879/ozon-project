@@ -1,46 +1,40 @@
-# 云服务器最小化上线步骤（命令版）
+# 云端最小部署手册（命令版）
 
-> 目标：在一台 Linux 云服务器上，用 Docker Compose 跑起 `postgres + api + web`。  
-> 适用：当前项目结构（`docker-compose.yml` + `ozon-admin-api` + `ozon-admin-web`）。
+目标：在一台 Linux 服务器上，以最小步骤运行 `postgres + api + web`。
 
-## 1. 服务器准备（仅首次）
+## 1. 首次准备
 
 ```bash
 sudo apt update
 sudo apt install -y ca-certificates curl git
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+$(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker $USER
 ```
 
-重新登录一次 SSH，让 `docker` 组生效。
+重新登录 SSH，使 `docker` 组生效。
 
-## 2. 拉代码并进入目录
+## 2. 拉代码
 
 ```bash
-cd /opt
-sudo mkdir -p ozon-project
+sudo mkdir -p /opt/ozon-project
 sudo chown -R $USER:$USER /opt/ozon-project
 git clone <你的仓库地址> /opt/ozon-project
 cd /opt/ozon-project
 ```
 
-## 3. 配置环境变量（必须）
-
-先复制模板：
+## 3. 配置环境变量
 
 ```bash
 cp .env.compose.example .env
 cp ozon-admin-api/.env.production.example ozon-admin-api/.env
 ```
 
-编辑根目录 `.env`（给 compose 用）：
+根目录 `.env` 最少需要：
 
 ```env
 POSTGRES_DB=ozon_admin
@@ -48,32 +42,23 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<强密码>
 POSTGRES_PORT=5432
 
-DATABASE_URL=postgresql://postgres:<强密码>@postgres:5432/ozon_admin?schema=public
-
 API_PORT=3001
 WEB_PORT=3000
+DATABASE_URL=postgresql://postgres:<强密码>@postgres:5432/ozon_admin?schema=public
 NEXT_PUBLIC_API_BASE_URL=https://api.<你的域名>
 ```
 
-编辑 `ozon-admin-api/.env`（给 API 用）：
+`ozon-admin-api/.env` 至少需要：
+- `DATABASE_URL`
+- `CORS_ORIGINS=https://admin.<你的域名>`
+- `ORDER_WEBHOOK_SECRET=<随机强字符串>`
+- Ozon 实时同步相关参数（如启用）
 
-- `DATABASE_URL`（建议与上面一致，主机名用 `postgres`）
-- `ORDER_WEBHOOK_SECRET`
-- `CORS_ORIGINS`（填前端真实域名）
-- Ozon 相关密钥（如你启用真实同步）
-
-## 4. 启动服务
+## 4. 启动（标准）
 
 ```bash
 docker compose up -d --build
 docker compose ps
-```
-
-查看日志：
-
-```bash
-docker compose logs -f api
-docker compose logs -f web
 ```
 
 ## 5. 健康检查
@@ -84,37 +69,56 @@ curl -sS http://127.0.0.1:3001/health/ready
 curl -I http://127.0.0.1:3000
 ```
 
-## 6. 发布前闸门（建议）
+## 6. 低配机器最小稳定恢复（不重构建）
 
-在本地或运维机器执行（你已具备）：
+适用于 1C1G/1C2G 机器卡在构建的情况。
 
-```powershell
-.\scripts\ops-release-gate.ps1
+优先使用脚本：
+
+```bash
+cd /opt/ozon-project
+bash scripts/ops-cloud-recover.sh
 ```
 
-要求看到 `Release gate PASSED` 再上线。
+常用参数：
+
+```bash
+# 只恢复 postgres + api
+bash scripts/ops-cloud-recover.sh --skip-web
+
+# 不拉代码，直接恢复
+bash scripts/ops-cloud-recover.sh --no-pull
+```
+
+手动命令（备用）：
+
+```bash
+cd /opt/ozon-project
+git pull --ff-only
+docker compose stop
+docker compose up -d --no-build
+docker compose ps
+docker compose logs --tail=80 api
+docker compose logs --tail=80 web
+```
 
 ## 7. 升级发布
 
 ```bash
 cd /opt/ozon-project
-git pull
+git pull --ff-only
 docker compose up -d --build
 docker image prune -f
 ```
 
-## 8. 快速回滚（最小）
-
-如果新版本异常：
-
-1. 回到上一个 Git tag/commit
-2. 重新构建启动
+## 8. 快速回滚
 
 ```bash
-git checkout <上一个稳定tag或commit>
+cd /opt/ozon-project
+git checkout <稳定tag或commit>
 docker compose up -d --build
 ```
 
-数据库回滚使用你已验证过的 dump：
-- 备份：`scripts/ops-db-backup.ps1`
-- 恢复：`scripts/ops-db-restore.ps1`
+数据库恢复使用：
+- `scripts/ops-db-backup.ps1`
+- `scripts/ops-db-restore.ps1`

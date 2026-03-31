@@ -31,7 +31,7 @@ export default function LoginPage() {
       const result = await accountApi.login(username.trim(), password.trim());
       if (result.requirePasswordChange || result.data.mustChangePassword) {
         setNeedChangePassword(true);
-        setSuccessMessage('首次登录需修改密码，请先完成改密');
+        setSuccessMessage('首次登录需要修改密码，请先完成改密');
         return;
       }
       setCurrentUser({
@@ -124,9 +124,7 @@ export default function LoginPage() {
         </form>
       ) : (
         <form onSubmit={handleChangeFirstPassword} className="login-form">
-          <div className="table-subtitle">
-            当前账号：{username}
-          </div>
+          <div className="table-subtitle">当前账号：{username}</div>
           <div>
             <label className="filter-label">新密码</label>
             <input
