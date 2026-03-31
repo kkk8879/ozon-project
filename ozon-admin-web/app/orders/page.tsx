@@ -1121,8 +1121,8 @@ function OrdersPageContent() {
             >
               <option value="all">全部店铺</option>
               {storeOptions.map((store) => (
-                <option key={store} value={store}>
-                  {store}
+                <option key={store} value={String(store)}>
+                  店铺 ID: {store}
                 </option>
               ))}
             </select>

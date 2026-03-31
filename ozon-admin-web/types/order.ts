@@ -12,6 +12,8 @@ export type OrderStatusOption = {
 export type OrderItem = {
   id: number;
   orderNo: string;
+  storeId: number;
+  storeClientId: string;
   storeName: string;
   status: string;
   totalAmount: number;

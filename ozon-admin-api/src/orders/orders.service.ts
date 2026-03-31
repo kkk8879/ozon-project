@@ -48,7 +48,11 @@ type FailedStore = {
 type OrderRecord = {
   id: number;
   orderNo: string;
+  storeId: number;
   storeName: string;
+  store?: {
+    clientId: string;
+  } | null;
   status: string;
   totalAmount: number;
   currency: string;
@@ -146,6 +150,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   async getOrders() {
     const orders = await this.prisma.order.findMany({
+      include: {
+        store: {
+          select: {
+            clientId: true,
+          },
+        },
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     return orders.map((item) => this.toOrderView(item));
@@ -743,6 +754,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return {
       id: item.id,
       orderNo: item.orderNo,
+      storeId: item.storeId,
+      storeClientId: item.store?.clientId || '',
       storeName: item.storeName,
       status: item.status,
       totalAmount: item.totalAmount,

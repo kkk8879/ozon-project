@@ -53,7 +53,13 @@ export function getOrderStatusClassName(status: string) {
 }
 
 export function getOrderStoreOptions(orders: OrderItem[]) {
-  return Array.from(new Set(orders.map((order) => order.storeName)));
+  return Array.from(
+    new Set(
+      orders
+        .map((order) => (order.storeClientId || '').trim())
+        .filter((id) => id.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
 }
 
 export function filterOrders(params: {
@@ -86,7 +92,12 @@ export function filterOrders(params: {
   }
 
   if (selectedStore !== 'all') {
-    result = result.filter((order) => order.storeName === selectedStore);
+    result = result.filter(
+      (order) =>
+        (order.storeClientId || '').trim() === selectedStore ||
+        String(order.storeId) === selectedStore ||
+        order.storeName === selectedStore,
+    );
   }
 
   const keyword = searchKeyword.trim().toLowerCase();
